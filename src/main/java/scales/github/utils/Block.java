@@ -9,4 +9,12 @@ public class Block {
     public int y;
     public int width;
     public int height;
+
+    public BlockTypes blockType;
+
+    public enum BlockTypes {
+        SPAWN,
+        DEFAULT,
+        WIN
+    }
 }

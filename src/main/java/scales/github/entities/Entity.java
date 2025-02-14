@@ -13,6 +13,8 @@ public class Entity {
 
     private final boolean controllable;
 
+    private LevelInfo levelInfo;
+
     public Vec2d pos;
     public Vec2d lastPos;
     public Vec2d velocity;
@@ -45,13 +47,15 @@ public class Entity {
 
     private long lastTick;
 
-    public void spawn(Vec2d spawnPos) {
-        this.pos = spawnPos;
+    public void spawn(LevelInfo levelInfo) {
+        this.levelInfo = levelInfo;
+
+        this.pos = levelInfo.spawnPos.get();
         this.lastPos = this.pos.get();
         this.velocity = new Vec2d(0,0);
         this.lastTick = System.currentTimeMillis();
 
-        Main.entities.add(this);
+        if (!Main.entities.contains(this)) Main.entities.add(this);
     }
 
 
@@ -128,49 +132,74 @@ public class Entity {
 
     // separate loop for ceilings and floors, o(2N) is crazy!
     // tho lwk, this code should run borderline instantly and can support thousands of pixels!
-    // todo: maybe split into chunks or smth, currently DEF do not need to!
+    // todo: maybe split into chunks or smth, currently do not need to!
     protected void fixCollisions() {
         this.onGround = false;
         this.horizontalCollision = false;
         this.verticleCollision = false;
 
-        for (Block square : Main.levelMap) {
-            // checks if NOT (player top is above square bottom OR player bottom is below the square top)
+        for (Block rectangle : Main.levelMap) {
+            // checks if NOT (player top is above rectangle bottom OR player bottom is below the rectangle top)
             // done in inverse because this was what came to mind first and is easier to read
-            if (!(this.lastPos.y - this.height/2 >= square.y + square.height || this.lastPos.y + this.height/2 <= square.y)) {
+            if (!(this.lastPos.y - this.height/2 >= rectangle.y + rectangle.height || this.lastPos.y + this.height/2 <= rectangle.y)) {
                 // was right of wall, now your on its left
-                if (this.lastPos.x - (this.width/2) >= square.x + square.width && this.pos.x - (this.width/2) < square.x + square.width) {
-                    this.pos.x = square.x + square.width + this.width/2;
-                    this.horizontalCollision = true;
+                if (this.lastPos.x - (this.width/2) >= rectangle.x + rectangle.width && this.pos.x - (this.width/2) < rectangle.x + rectangle.width) {
+                    collide(rectangle, rectangle.x + rectangle.width + this.width/2, true, false);
                 }
 
                 // was left of wall, now right of wall
-                if (this.lastPos.x + (this.width/2) <= square.x && this.pos.x + (this.width/2) > square.x) {
-                    this.pos.x = square.x - this.width/2;
-                    this.horizontalCollision = true;
+                if (this.lastPos.x + (this.width/2) <= rectangle.x && this.pos.x + (this.width/2) > rectangle.x) {
+                    collide(rectangle, rectangle.x - this.width/2, true, false);
                 }
             }
         }
 
         // seperate loop to stop bumping into a ceiling when against a wall!
-        for (Block square : Main.levelMap) {
-            if (this.pos.x + (this.width/2) > square.x && this.pos.x - (this.width/2) < square.x + square.width) {
+        for (Block rectangle : Main.levelMap) {
+            if (this.pos.x + (this.width/2) > rectangle.x && this.pos.x - (this.width/2) < rectangle.x + rectangle.width) {
                 // ceilings
-                if (this.lastPos.y - (this.height/2) >= square.y + square.height && this.pos.y - (this.height/2) <= square.y + square.height) {
+                if (this.lastPos.y - (this.height/2) >= rectangle.y + rectangle.height && this.pos.y - (this.height/2) <= rectangle.y + rectangle.height) {
                     // offset by 0.01 so you don't horizontally collide, can be removed probably, really specific issue, but def happens!
-                    this.pos.y = square.y + square.height + this.height/2 + 0.01;
-                    this.verticleCollision = true;
+                    collide(rectangle, rectangle.y + rectangle.height + this.height/2 + 0.01, false, false);
                 }
 
                 // floors
-                if (this.lastPos.y + (this.height/2) <= square.y && this.pos.y + (this.height/2) >= square.y) {
-                    this.pos.y = square.y - this.height/2;
-
-                    this.onGround = true;
-                    this.verticleCollision = true;
+                if (this.lastPos.y + (this.height/2) <= rectangle.y && this.pos.y + (this.height/2) >= rectangle.y) {
+                    collide(rectangle, rectangle.y - this.height/2, false, true);
                 }
             }
         }
+    }
+
+    private void collide(Block rectangle, double pos, boolean horizontalCollision, boolean ground) {
+        if (rectangle.blockType == Block.BlockTypes.WIN) {
+            win();
+            return;
+        }
+
+        if (horizontalCollision) {
+            this.pos.x = pos;
+            this.horizontalCollision = true;
+        }
+        else {
+            this.pos.y = pos;
+            this.verticleCollision = true;
+
+            if (ground) this.onGround = true;
+        }
+    }
+
+    private void win() {
+        this.respawn();
+    }
+
+    private void die() {
+        this.respawn();
+    }
+
+
+    private void respawn() {
+        this.spawn(this.levelInfo);
     }
 
     private double applyFriction(double friction, double start, double end) {

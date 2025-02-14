@@ -36,13 +36,14 @@ public class Main {
     public static ArrayList<Block> levelMap = new ArrayList<>();
 
 
+    private static LevelInfo levelInfo;
 
 
     public static void main(String[] args) throws IOException {
         level = ImageIO.read(Objects.requireNonNull(Main.class.getClassLoader().getResourceAsStream("level.png")));
         backgroundImage = ImageIO.read(Objects.requireNonNull(Main.class.getClassLoader().getResourceAsStream("background.png")));
 
-        createLevelFromImage(level);
+        levelInfo = createLevelFromImage(level);
 
         createWindow();
         mainLoop();
@@ -50,25 +51,33 @@ public class Main {
 
     static Boolean[][] blackListedCoordinates = new Boolean[0][0];
 
-    private static void createLevelFromImage(BufferedImage levelImage) {
+    private static LevelInfo createLevelFromImage(BufferedImage levelImage) {
+        Vec2d spawnPos = new Vec2d(0,0);
+
         blackListedCoordinates = new Boolean[levelImage.getWidth()][levelImage.getHeight()];
         for (int x = 0; x < levelImage.getWidth(); x++) {
             for (int y = 0; y < levelImage.getHeight(); y++) {
-                if (validPixel(x,y)) {
+                if (validPixel(x,y, null, levelImage)) {
+                    Block.BlockTypes blockType = getBlockType(x,y, levelImage);
+                    if (blockType == Block.BlockTypes.SPAWN) {
+                        spawnPos = new Vec2d(x+0.5,y+0.5);
+                        continue;
+                    }
+
                     int width = 1;
                     int height = 1;
 
-                    while (x+width < levelImage.getWidth() && validPixel(x+width,y)) {
+                    while (x+width < levelImage.getWidth() && validPixel(x+width,y, blockType, levelImage)) {
                         blackListedCoordinates[x+width][y] = true;
                         width++;
                     }
 
-                    while (y+height < levelImage.getHeight() && validPixel(x,y+height)) {
+                    while (y+height < levelImage.getHeight() && validPixel(x,y+height, blockType, levelImage)) {
                         boolean fullLayer = true;
 
                         // check if every coordinate is valid for the width
                         for (int w = 0; w < width; w++) {
-                            if (validPixel(x+w,y+height)) {
+                            if (validPixel(x+w,y+height, blockType, levelImage)) {
                                 blackListedCoordinates[x+w][y + height] = true;
                                 continue;
                             }
@@ -79,15 +88,25 @@ public class Main {
                         else break;
                     }
 
-                    levelMap.add(new Block(x, y, width, height));
+                    levelMap.add(new Block(x, y, width, height, blockType));
                 }
             }
         }
+
+        return new LevelInfo(spawnPos, levelImage.getHeight(), levelImage.getWidth());
     }
 
-    private static boolean validPixel(int x, int y) {
+    private static boolean validPixel(int x, int y, Block.BlockTypes blockType, BufferedImage image) {
         // level.getRGB(x,y) == -16777216
-        return (level.getRGB(x,y) & 0xff000000) >>> 24 != 0 && blackListedCoordinates[x][y] == null;
+        return image.getRGB(x,y) >>> 24 != 0 && (blockType == null || getBlockType(x,y, image) == blockType) && blackListedCoordinates[x][y] == null;
+    }
+
+    private static Block.BlockTypes getBlockType(int x, int y, BufferedImage image) {
+        return switch (image.getRGB(x,y)) {
+            case -65536 -> Block.BlockTypes.SPAWN;
+            case -16711936 -> Block.BlockTypes.WIN;
+            default -> Block.BlockTypes.DEFAULT;
+        };
     }
 
     private static void createWindow() {
@@ -110,7 +129,7 @@ public class Main {
     }
 
     private static void mainLoop() {
-        player.spawn(new Vec2d(0,0));
+        player.spawn(levelInfo);
 
         while (true) {
             //long timeStart = System.nanoTime();
