@@ -144,12 +144,12 @@ public class Entity {
             if (!(this.lastPos.y - this.height/2 >= rectangle.y + rectangle.height || this.lastPos.y + this.height/2 <= rectangle.y)) {
                 // was right of wall, now your on its left
                 if (this.lastPos.x - (this.width/2) >= rectangle.x + rectangle.width && this.pos.x - (this.width/2) < rectangle.x + rectangle.width) {
-                    collide(rectangle, rectangle.x + rectangle.width + this.width/2, true, false);
+                    collide(rectangle, rectangle.x + rectangle.width + this.width/2, true, false, false);
                 }
 
                 // was left of wall, now right of wall
                 if (this.lastPos.x + (this.width/2) <= rectangle.x && this.pos.x + (this.width/2) > rectangle.x) {
-                    collide(rectangle, rectangle.x - this.width/2, true, false);
+                    collide(rectangle, rectangle.x - this.width/2, true, false, true);
                 }
             }
         }
@@ -160,18 +160,26 @@ public class Entity {
                 // ceilings
                 if (this.lastPos.y - (this.height/2) >= rectangle.y + rectangle.height && this.pos.y - (this.height/2) <= rectangle.y + rectangle.height) {
                     // offset by 0.01 so you don't horizontally collide, can be removed probably, really specific issue, but def happens!
-                    collide(rectangle, rectangle.y + rectangle.height + this.height/2 + 0.01, false, false);
+                    collide(rectangle, rectangle.y + rectangle.height + this.height/2 + 0.01, false, false, false);
                 }
 
                 // floors
                 if (this.lastPos.y + (this.height/2) <= rectangle.y && this.pos.y + (this.height/2) >= rectangle.y) {
-                    collide(rectangle, rectangle.y - this.height/2, false, true);
+                    collide(rectangle, rectangle.y - this.height/2, false, true, false);
                 }
             }
         }
     }
 
-    private void collide(Block rectangle, double pos, boolean horizontalCollision, boolean ground) {
+    private void collide(Block rectangle, double pos, boolean horizontalCollision, boolean ground, boolean left) {
+        // if not collided with left and the block only has left collisions, return
+        if (!left && rectangle.blockType == Block.BlockTypes.LEFT_WALL) return;
+        if (left && rectangle.blockType == Block.BlockTypes.RIGHT_WALL) return;
+
+        // if not collided with ceiling and the block only has ceiling collisions, return
+        if (ground && rectangle.blockType == Block.BlockTypes.CEILING) return;
+        if (!ground && rectangle.blockType == Block.BlockTypes.FLOOR) return;
+
         if (rectangle.blockType == Block.BlockTypes.WIN) {
             win();
             return;

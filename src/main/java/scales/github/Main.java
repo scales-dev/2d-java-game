@@ -102,9 +102,16 @@ public class Main {
     }
 
     private static Block.BlockTypes getBlockType(int x, int y, BufferedImage image) {
-        return switch (image.getRGB(x,y)) {
-            case -65536 -> Block.BlockTypes.SPAWN;
-            case -16711936 -> Block.BlockTypes.WIN;
+        // i swear image.getRGB(x,y) is inverted. not sure why!
+        return switch (16777216+image.getRGB(x,y)) {
+            case 0xFF0000 -> Block.BlockTypes.SPAWN;
+            case 0x00FF00 -> Block.BlockTypes.WIN;
+
+            case 0xC800C8 -> Block.BlockTypes.LEFT_WALL;
+            case 0x00C8C8 -> Block.BlockTypes.RIGHT_WALL;
+            case 0xC8C800 -> Block.BlockTypes.FLOOR;
+            case 0x640000 -> Block.BlockTypes.CEILING;
+
             default -> Block.BlockTypes.DEFAULT;
         };
     }

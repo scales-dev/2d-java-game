@@ -15,6 +15,13 @@ public class Block {
     public enum BlockTypes {
         SPAWN,
         DEFAULT,
+
+        // directional walls
+        LEFT_WALL,
+        RIGHT_WALL,
+        FLOOR,
+        CEILING,
+
         WIN
     }
 }
