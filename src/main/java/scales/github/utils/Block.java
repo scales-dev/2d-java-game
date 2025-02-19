@@ -22,6 +22,7 @@ public class Block {
         FLOOR,
         CEILING,
 
-        WIN
+        WIN,
+        BACKGROUND
     }
 }

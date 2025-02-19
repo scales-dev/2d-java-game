@@ -63,6 +63,7 @@ public class Main {
                         spawnPos = new Vec2d(x+0.5,y+0.5);
                         continue;
                     }
+                    if (blockType == Block.BlockTypes.BACKGROUND) continue;
 
                     int width = 1;
                     int height = 1;
@@ -97,12 +98,11 @@ public class Main {
     }
 
     private static boolean validPixel(int x, int y, Block.BlockTypes blockType, BufferedImage image) {
-        // level.getRGB(x,y) == -16777216
         return image.getRGB(x,y) >>> 24 != 0 && (blockType == null || getBlockType(x,y, image) == blockType) && blackListedCoordinates[x][y] == null;
     }
 
     private static Block.BlockTypes getBlockType(int x, int y, BufferedImage image) {
-        // i swear image.getRGB(x,y) is inverted. not sure why!
+        // image.getRGB(x,y) is inverted because of signed numbers or smth magic
         return switch (16777216+image.getRGB(x,y)) {
             case 0xFF0000 -> Block.BlockTypes.SPAWN;
             case 0x00FF00 -> Block.BlockTypes.WIN;
@@ -112,7 +112,10 @@ public class Main {
             case 0xC8C800 -> Block.BlockTypes.FLOOR;
             case 0x640000 -> Block.BlockTypes.CEILING;
 
-            default -> Block.BlockTypes.DEFAULT;
+            // BLACK
+            case 0 -> Block.BlockTypes.DEFAULT;
+
+            default -> Block.BlockTypes.BACKGROUND;
         };
     }
 
@@ -146,7 +149,7 @@ public class Main {
             graphics.drawImage(backgroundImage, 0,0,frame.getWidth(),frame.getHeight(), null);
             graphics.scale((double) frame.getWidth() / baseWidth, (double) frame.getHeight() / baseHeight);
 
-            Vec2d interpolatedPos = player.getInterpolatedPos();
+            Vec2d interpolatedPos = player.getInterpolatedPos(false);
 
             graphics.translate(-interpolatedPos.x + baseWidth/2d, -interpolatedPos.y + baseHeight/2d);
 
@@ -155,9 +158,11 @@ public class Main {
             entities.forEach(Entity::tick);
             entities.forEach(Entity::render);
 
+            ParticleUtil.renderParticles();
+
             //graphics.setFont(new Font("Comic Sans MS", Font.PLAIN, 60));
             //double fps = 1d/((System.nanoTime() - timeStart) * 1.0E-9);
-            //int fpsRounded = (((int) fps) / 10000) * 10000;
+            //int fpsRounded = (((int) fps));
             //graphics.drawString(String.valueOf(fpsRounded), 40,40);
 
             finishDrawing();

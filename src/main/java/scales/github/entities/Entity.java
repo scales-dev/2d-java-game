@@ -17,6 +17,11 @@ public class Entity {
 
     public Vec2d pos;
     public Vec2d lastPos;
+
+    private final int ballSize = 2;
+    public Vec2d size;
+    public Vec2d lastSize;
+    
     public Vec2d velocity;
 
     public boolean onGround = false;
@@ -39,12 +44,6 @@ public class Entity {
     public final double verticalBounceMultiplier = 0.6;
     public final double minimumVerticalBounceVelocity = 0.5;
 
-    private final int ballSize = 2;
-    public double height = ballSize;
-    public double width = ballSize;
-
-    private final int ballRadius = ballSize/2;
-
     private long lastTick;
 
     public void spawn(LevelInfo levelInfo) {
@@ -52,6 +51,10 @@ public class Entity {
 
         this.pos = levelInfo.spawnPos.get();
         this.lastPos = this.pos.get();
+        
+        this.size = new Vec2d(this.ballSize, this.ballSize);
+        this.lastSize = this.size;
+        
         this.velocity = new Vec2d(0,0);
         this.lastTick = System.currentTimeMillis();
 
@@ -78,6 +81,9 @@ public class Entity {
     }
 
     public void tickMovement() {
+        // slowly resets deformations
+        this.reshape();
+
         this.lastPos = this.pos.get();
 
         this.friction = baseFriction;
@@ -113,20 +119,43 @@ public class Entity {
         this.velocity.x *= 1.2;
 
         // sooper awesome bounce wow wth!
-        if (this.velocity.y != 0) this.velocity.y /= this.verticalBounceMultiplier + 0.1;
+        if (this.velocity.y != 0) {
+            ParticleUtil.spawn(this.pos.x-this.size.x/2, this.pos.y, 0.5, 0.5, 10, new Color(255,255,255));
+            this.velocity.y /= this.verticalBounceMultiplier + 0.1;
+        }
 
         // don't use the ultra super wooper cool bounce if its not cool and super and ultra
-        if (this.velocity.y < this.jumpVelocity) this.velocity.y = this.jumpVelocity;
+        if (this.velocity.y < this.jumpVelocity) {
+            if (!this.onGround) ParticleUtil.spawn(this.pos.x-this.size.x/2, this.pos.y - 1, 1, 1, 5, new Color(255,255,255));
+
+            this.velocity.y = this.jumpVelocity;
+        }
+
+        ParticleUtil.spawn(this.pos.x-this.size.x/2, this.pos.y - 1, 0.5, 0.5, 5, playerColor);
+        this.size.y = ballSize * (this.velocity.y);
     }
 
     private void bounce() {
         if (this.horizontalCollision) {
             this.velocity.x *= -this.horizontalBounceMultiplier;
             if (this.velocity.x < this.minimumHorizontalBounceVelocity && this.velocity.x > -this.minimumHorizontalBounceVelocity) this.velocity.x = 0;
+            else {
+                // BOUNCE GO!
+                ParticleUtil.spawn(this.pos.x - this.velocity.x, this.pos.y-this.size.y/2, 0.5, 0.5, 10, playerColor);
+                this.size.x = ballSize * (Math.abs(this.velocity.x));
+            }
         }
         if (this.verticleCollision) {
             this.velocity.y *= -this.verticalBounceMultiplier;
             if (this.velocity.y < this.minimumVerticalBounceVelocity && this.onGround) this.velocity.y = 0;
+
+            // bounce gogogo
+            else if (this.onGround) {
+                // deform player
+                this.size.y = ballSize / Math.max(this.velocity.y*2, 1.1);
+
+                ParticleUtil.spawn(this.pos.x - this.size.x / 2, this.pos.y, 0.5, 0.5, 10, playerColor);
+            }
         }
     }
 
@@ -141,31 +170,31 @@ public class Entity {
         for (Block rectangle : Main.levelMap) {
             // checks if NOT (player top is above rectangle bottom OR player bottom is below the rectangle top)
             // done in inverse because this was what came to mind first and is easier to read
-            if (!(this.lastPos.y - this.height/2 >= rectangle.y + rectangle.height || this.lastPos.y + this.height/2 <= rectangle.y)) {
+            if (!(this.lastPos.y - this.lastSize.y/2 >= rectangle.y + rectangle.height || this.lastPos.y + this.lastSize.y/2 <= rectangle.y)) {
                 // was right of wall, now your on its left
-                if (this.lastPos.x - (this.width/2) >= rectangle.x + rectangle.width && this.pos.x - (this.width/2) < rectangle.x + rectangle.width) {
-                    collide(rectangle, rectangle.x + rectangle.width + this.width/2, true, false, false);
+                if (this.lastPos.x - (this.lastSize.x/2) >= rectangle.x + rectangle.width && this.pos.x - (this.size.x/2) < rectangle.x + rectangle.width) {
+                    collide(rectangle, rectangle.x + rectangle.width + this.size.x/2, true, false, false);
                 }
 
                 // was left of wall, now right of wall
-                if (this.lastPos.x + (this.width/2) <= rectangle.x && this.pos.x + (this.width/2) > rectangle.x) {
-                    collide(rectangle, rectangle.x - this.width/2, true, false, true);
+                if (this.lastPos.x + (this.lastSize.x/2) <= rectangle.x && this.pos.x + (this.size.x/2) > rectangle.x) {
+                    collide(rectangle, rectangle.x - this.size.x/2, true, false, true);
                 }
             }
         }
 
         // seperate loop to stop bumping into a ceiling when against a wall!
         for (Block rectangle : Main.levelMap) {
-            if (this.pos.x + (this.width/2) > rectangle.x && this.pos.x - (this.width/2) < rectangle.x + rectangle.width) {
+            if (this.pos.x + (this.size.x/2) > rectangle.x && this.pos.x - (this.size.x/2) < rectangle.x + rectangle.width) {
                 // ceilings
-                if (this.lastPos.y - (this.height/2) >= rectangle.y + rectangle.height && this.pos.y - (this.height/2) <= rectangle.y + rectangle.height) {
+                if (this.lastPos.y - (this.lastSize.y/2) >= rectangle.y + rectangle.height && this.pos.y - (this.size.y/2) <= rectangle.y + rectangle.height) {
                     // offset by 0.01 so you don't horizontally collide, can be removed probably, really specific issue, but def happens!
-                    collide(rectangle, rectangle.y + rectangle.height + this.height/2 + 0.01, false, false, false);
+                    collide(rectangle, rectangle.y + rectangle.height + this.size.y/2 + 0.01, false, false, false);
                 }
 
                 // floors
-                if (this.lastPos.y + (this.height/2) <= rectangle.y && this.pos.y + (this.height/2) >= rectangle.y) {
-                    collide(rectangle, rectangle.y - this.height/2, false, true, false);
+                if (this.lastPos.y + (this.lastSize.y/2) <= rectangle.y && this.pos.y + (this.size.y/2) >= rectangle.y) {
+                    collide(rectangle, rectangle.y - this.size.y/2, false, true, false);
                 }
             }
         }
@@ -214,49 +243,78 @@ public class Entity {
         return start - (friction * (start-end));
     }
 
-    public Vec2d getInterpolatedPos() {
+    public Vec2d getInterpolatedPos(boolean centre) {
         double partialTicks = MathUtil.getPartialTicks(this.lastTick);
 
-        double interpolatedX = (MathUtil.interpolate(this.lastPos.x, this.pos.x, partialTicks) - ballRadius) * Main.levelScale;
-        double interpolatedY = (MathUtil.interpolate(this.lastPos.y, this.pos.y, partialTicks) - ballRadius) * Main.levelScale;
+        double interpolatedX = (MathUtil.interpolate(this.lastPos.x, this.pos.x, partialTicks) - (centre ? this.size.x/2 : 0)) * Main.levelScale;
+        double interpolatedY = (MathUtil.interpolate(this.lastPos.y, this.pos.y, partialTicks) - (centre ? this.size.y/2 : 0)) * Main.levelScale;
 
         return new Vec2d(interpolatedX, interpolatedY);
     }
 
     public void render() {
-        Vec2d interpolatedPos = this.getInterpolatedPos();
+        Vec2d interpolatedPos = this.getInterpolatedPos(true);
 
         renderKawaiiLittleBody(interpolatedPos.x, interpolatedPos.y);
         renderEyes(interpolatedPos.x, interpolatedPos.y);
     }
 
+    private final Color playerColor = new Color(138, 140, 255);
     private void renderKawaiiLittleBody(double characterX, double characterY) {
-        Main.graphics.setColor(new Color(138, 140, 255));
-        Main.graphics.fillRoundRect((int) characterX, (int) characterY, ballSize*Main.levelScale, ballSize*Main.levelScale, ballSize*Main.levelScale, ballSize*Main.levelScale);
+        Main.graphics.setColor(playerColor);
+
+        int width = (int) (this.size.x*Main.levelScale);
+        int height = (int) (this.size.y*Main.levelScale);
+
+        Main.graphics.fillRoundRect((int) characterX, (int) characterY, width, height, width, height);
     }
 
     private void renderEyes(double characterX, double characterY) {
-        int eyeSize = (int) ((ballSize * Main.levelScale) / 4d);
-        int pupilSize = (int) ((ballSize * Main.levelScale) / 8d);
-        Vec2d leftEyePos = getEyePos(eyeSize, characterX, characterY, this.pos.x / 2);
-        Vec2d rightEyePos = getEyePos(eyeSize, characterX, characterY, this.pos.x / 2 + 10);
+        double smallestSize = Math.min(this.size.y, this.size.x);
+
+        int eyeW = (int) getEyeSize(this.size.x);
+        int eyeH = (int) getEyeSize(this.size.y);
+
+        // doesn't do eyeW/2 because casting to int rounds it and I don't want to render 1 pixel off!!!
+        int pupilW = (int) (getEyeSize(this.size.x)/2);
+        int pupilH = (int) (getEyeSize(this.size.y)/2);
+
+        Vec2d leftEyePos = getEyePos(characterX, characterY, this.pos.x / 2);
+        Vec2d rightEyePos = getEyePos(characterX, characterY, this.pos.x / 2 + 10);
 
         Main.graphics.setColor(new Color(255, 255, 255));
-        Main.graphics.fillRoundRect((int) (leftEyePos.x), (int) (leftEyePos.y), eyeSize, eyeSize, eyeSize, eyeSize);
-        Main.graphics.fillRoundRect((int) (rightEyePos.x), (int) (rightEyePos.y), eyeSize, eyeSize, eyeSize, eyeSize);
+        Main.graphics.fillRoundRect((int) (leftEyePos.x), (int) (leftEyePos.y), eyeW, eyeH, eyeW, eyeH);
+        Main.graphics.fillRoundRect((int) (rightEyePos.x), (int) (rightEyePos.y), eyeW, eyeH, eyeW, eyeH);
 
-        double pupilInset = (eyeSize/2d - pupilSize/2d);
+        double pupilInsetX = (eyeW/2d - pupilW/2d);
+        double pupilInsetY = (eyeH/2d - pupilH/2d);
         Main.graphics.setColor(new Color(0, 0, 0));
-        Main.graphics.fillRoundRect((int) (leftEyePos.x + pupilInset), (int) (pupilInset + leftEyePos.y), pupilSize, pupilSize, pupilSize, pupilSize);
-        Main.graphics.fillRoundRect((int) (rightEyePos.x + pupilInset), (int) (pupilInset + rightEyePos.y), pupilSize, pupilSize, pupilSize, pupilSize);
+        Main.graphics.fillRoundRect((int) (leftEyePos.x + pupilInsetX), (int) (pupilInsetY + leftEyePos.y), pupilW, pupilH, pupilW, pupilH);
+        Main.graphics.fillRoundRect((int) (rightEyePos.x + pupilInsetX), (int) (pupilInsetY + rightEyePos.y), pupilW, pupilH, pupilW, pupilH);
     }
 
 
-    private Vec2d getEyePos(double eyeSize, double x, double y, double rotMulti) {
-        double eyeOffset = eyeSize/2d;
-        double posX = Math.cos(rotMulti) * ((ballRadius * Main.levelScale) - eyeSize) - eyeOffset;
-        double posY = Math.sin(rotMulti) * ((ballRadius * Main.levelScale) - eyeSize) + eyeSize + eyeOffset;
+    private Vec2d getEyePos(double x, double y, double rotMulti) {
+        double eyeSizeW = getEyeSize(this.size.x);
+        double eyeSizeH = getEyeSize(this.size.y);
 
-        return new Vec2d(posX+x + (ballRadius * Main.levelScale),posY+y);
+        double posX = Math.cos(rotMulti) * (((this.size.x/2) * Main.levelScale) - eyeSizeW) - eyeSizeW/2d;
+        double posY = Math.sin(rotMulti) * (((this.size.y/2) * Main.levelScale) - eyeSizeH) + eyeSizeH + eyeSizeH/2d;
+
+        return new Vec2d(posX+x + ((this.size.x/2) * Main.levelScale),posY+y);
+    }
+
+    private double getEyeSize(double w) {
+        return (int) ((w * Main.levelScale) / 4d);
+    }
+
+    private void reshape() {
+        this.lastSize = this.size.get();
+
+        double heightIncrease = MathUtil.roundTo(1 - (this.size.y / this.ballSize), 2);
+        double widthIncrease = MathUtil.roundTo(1 - (this.size.x / this.ballSize), 2);
+
+        this.size.y += heightIncrease;
+        this.size.x += widthIncrease;
     }
 }
