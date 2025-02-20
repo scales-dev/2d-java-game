@@ -1,6 +1,7 @@
 package scales.github.entities;
 
 import scales.github.Main;
+import scales.github.utils.Rectangle;
 import scales.github.utils.*;
 
 import java.awt.*;
@@ -66,6 +67,8 @@ public class Entity {
     public Control right = new Control(KeyEvent.VK_D, 3);
     public Control up = new Control(KeyEvent.VK_SPACE, 3);
 
+    public Control die = new Control(KeyEvent.VK_R, 1);
+
     public void tick() {
         long millisSinceLastTick = System.currentTimeMillis() - this.lastTick;
         long millisBetweenFrame = 1000/Main.gameFrameRate;
@@ -81,6 +84,8 @@ public class Entity {
     }
 
     public void tickMovement() {
+        if (die.pressed() || this.pos.y > levelInfo.lowestPos + 30) die();
+
         // slowly resets deformations
         this.reshape();
 
@@ -141,7 +146,7 @@ public class Entity {
             if (this.velocity.x < this.minimumHorizontalBounceVelocity && this.velocity.x > -this.minimumHorizontalBounceVelocity) this.velocity.x = 0;
             else {
                 // BOUNCE GO!
-                ParticleUtil.spawn(this.pos.x - this.velocity.x, this.pos.y-this.size.y/2, 0.5, 0.5, 10, playerColor);
+                ParticleUtil.spawn(this.pos.x - this.size.x/2 - this.velocity.x*2, this.pos.y-this.size.y/2, 0.5, 0.5, 10, playerColor);
                 this.size.x = ballSize * (Math.abs(this.velocity.x));
             }
         }
@@ -162,59 +167,72 @@ public class Entity {
     // separate loop for ceilings and floors, o(2N) is crazy!
     // tho lwk, this code should run borderline instantly and can support thousands of pixels!
     // todo: maybe split into chunks or smth, currently do not need to!
+    //  also if you magically grow while inbetween rectangles, you phase down!
     protected void fixCollisions() {
         this.onGround = false;
         this.horizontalCollision = false;
         this.verticleCollision = false;
 
-        for (Block rectangle : Main.levelMap) {
+        for (Rectangle rectangle : Main.levelMap) {
             // checks if NOT (player top is above rectangle bottom OR player bottom is below the rectangle top)
             // done in inverse because this was what came to mind first and is easier to read
             if (!(this.lastPos.y - this.lastSize.y/2 >= rectangle.y + rectangle.height || this.lastPos.y + this.lastSize.y/2 <= rectangle.y)) {
                 // was right of wall, now your on its left
                 if (this.lastPos.x - (this.lastSize.x/2) >= rectangle.x + rectangle.width && this.pos.x - (this.size.x/2) < rectangle.x + rectangle.width) {
-                    collide(rectangle, rectangle.x + rectangle.width + this.size.x/2, true, false, false);
+                    // adding 0.01 is a temp fix for phasing through walls when growing into them!
+                    collide(rectangle, rectangle.x + rectangle.width + this.size.x/2 + 0.01, Side.RIGHT);
                 }
 
                 // was left of wall, now right of wall
                 if (this.lastPos.x + (this.lastSize.x/2) <= rectangle.x && this.pos.x + (this.size.x/2) > rectangle.x) {
-                    collide(rectangle, rectangle.x - this.size.x/2, true, false, true);
+                    collide(rectangle, rectangle.x - this.size.x/2 - 0.01, Side.LEFT);
                 }
             }
         }
 
         // seperate loop to stop bumping into a ceiling when against a wall!
-        for (Block rectangle : Main.levelMap) {
+        for (Rectangle rectangle : Main.levelMap) {
             if (this.pos.x + (this.size.x/2) > rectangle.x && this.pos.x - (this.size.x/2) < rectangle.x + rectangle.width) {
                 // ceilings
                 if (this.lastPos.y - (this.lastSize.y/2) >= rectangle.y + rectangle.height && this.pos.y - (this.size.y/2) <= rectangle.y + rectangle.height) {
-                    // offset by 0.01 so you don't horizontally collide, can be removed probably, really specific issue, but def happens!
-                    collide(rectangle, rectangle.y + rectangle.height + this.size.y/2 + 0.01, false, false, false);
+                    collide(rectangle, rectangle.y + rectangle.height + this.size.y/2, Side.UP);
                 }
 
                 // floors
                 if (this.lastPos.y + (this.lastSize.y/2) <= rectangle.y && this.pos.y + (this.size.y/2) >= rectangle.y) {
-                    collide(rectangle, rectangle.y - this.size.y/2, false, true, false);
+                    collide(rectangle, rectangle.y - this.size.y/2, Side.DOWN);
                 }
             }
         }
     }
 
-    private void collide(Block rectangle, double pos, boolean horizontalCollision, boolean ground, boolean left) {
+    private enum Side {
+        LEFT,
+        RIGHT,
+        UP,
+        DOWN
+    }
+
+    private void collide(Rectangle rectangle, double pos, Side side) {
         // if not collided with left and the block only has left collisions, return
-        if (!left && rectangle.blockType == Block.BlockTypes.LEFT_WALL) return;
-        if (left && rectangle.blockType == Block.BlockTypes.RIGHT_WALL) return;
+        if (side != Side.LEFT && rectangle.block.blockType == Block.BlockTypes.LEFT_WALL) return;
+        if (side != Side.RIGHT && rectangle.block.blockType == Block.BlockTypes.RIGHT_WALL) return;
 
         // if not collided with ceiling and the block only has ceiling collisions, return
-        if (ground && rectangle.blockType == Block.BlockTypes.CEILING) return;
-        if (!ground && rectangle.blockType == Block.BlockTypes.FLOOR) return;
+        if (side != Side.UP && rectangle.block.blockType == Block.BlockTypes.CEILING) return;
+        if (side != Side.DOWN && rectangle.block.blockType == Block.BlockTypes.FLOOR) return;
 
-        if (rectangle.blockType == Block.BlockTypes.WIN) {
+        if (rectangle.block.blockType == Block.BlockTypes.WIN) {
             win();
             return;
         }
 
-        if (horizontalCollision) {
+        if (rectangle.block.blockType == Block.BlockTypes.DIE) {
+            die();
+            return;
+        }
+
+        if (side == Side.LEFT || side == Side.RIGHT) {
             this.pos.x = pos;
             this.horizontalCollision = true;
         }
@@ -222,7 +240,7 @@ public class Entity {
             this.pos.y = pos;
             this.verticleCollision = true;
 
-            if (ground) this.onGround = true;
+            if (side == Side.DOWN) this.onGround = true;
         }
     }
 
@@ -270,8 +288,6 @@ public class Entity {
     }
 
     private void renderEyes(double characterX, double characterY) {
-        double smallestSize = Math.min(this.size.y, this.size.x);
-
         int eyeW = (int) getEyeSize(this.size.x);
         int eyeH = (int) getEyeSize(this.size.y);
 
@@ -311,8 +327,8 @@ public class Entity {
     private void reshape() {
         this.lastSize = this.size.get();
 
-        double heightIncrease = MathUtil.roundTo(1 - (this.size.y / this.ballSize), 2);
-        double widthIncrease = MathUtil.roundTo(1 - (this.size.x / this.ballSize), 2);
+        double heightIncrease =  1 - (this.size.y / this.ballSize);
+        double widthIncrease = 1 - (this.size.x / this.ballSize);
 
         this.size.y += heightIncrease;
         this.size.x += widthIncrease;

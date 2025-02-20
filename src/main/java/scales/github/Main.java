@@ -2,6 +2,7 @@ package scales.github;
 
 import scales.github.entities.Entity;
 import scales.github.listeners.KeyboardListener;
+import scales.github.utils.Rectangle;
 import scales.github.utils.*;
 
 import javax.imageio.ImageIO;
@@ -10,8 +11,9 @@ import java.awt.*;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Objects;
+import java.util.HashMap;
 
 public class Main {
     public static final JFrame frame = new JFrame("haiii ;3");
@@ -33,15 +35,18 @@ public class Main {
     public static int levelScale = baseWidth/100;
 
     // god strike me down
-    public static ArrayList<Block> levelMap = new ArrayList<>();
+    public static ArrayList<Rectangle> levelMap = new ArrayList<>();
 
 
     private static LevelInfo levelInfo;
 
+    private static BufferedImage decoratedLevelImage;
+    private static final int pixelSize = 16;
 
-    public static void main(String[] args) throws IOException {
-        level = ImageIO.read(Objects.requireNonNull(Main.class.getClassLoader().getResourceAsStream("level.png")));
-        backgroundImage = ImageIO.read(Objects.requireNonNull(Main.class.getClassLoader().getResourceAsStream("background.png")));
+
+    public static void main(String[] args) {
+        level = getImageResource("level.png");
+        backgroundImage = getImageResource("background.png");
 
         levelInfo = createLevelFromImage(level);
 
@@ -49,16 +54,43 @@ public class Main {
         mainLoop();
     }
 
+    public static InputStream getResourceFile(String name) {
+        return Main.class.getClassLoader().getResourceAsStream(name);
+    }
+
+    private static final HashMap<String, BufferedImage> imageCache = new HashMap<>();
+    public static BufferedImage getImageResource(String name) {
+        if (imageCache.containsKey(name)) return imageCache.get(name);
+
+        try {
+            BufferedImage image = ImageIO.read(getResourceFile(name));
+            imageCache.put(name, image);
+            return image;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
     static Boolean[][] blackListedCoordinates = new Boolean[0][0];
 
     private static LevelInfo createLevelFromImage(BufferedImage levelImage) {
         Vec2d spawnPos = new Vec2d(0,0);
 
+        decoratedLevelImage = new BufferedImage(level.getWidth()*pixelSize, level.getHeight()*pixelSize, BufferedImage.TYPE_INT_ARGB);
+        Graphics g = decoratedLevelImage.createGraphics();
+
         blackListedCoordinates = new Boolean[levelImage.getWidth()][levelImage.getHeight()];
         for (int x = 0; x < levelImage.getWidth(); x++) {
             for (int y = 0; y < levelImage.getHeight(); y++) {
+                // todo: when level editor, replace this with getting a Block,
+                //  this would also save me having to do getBlockName(blockType), instead (Block).blockName!
+                Block.BlockTypes blockType = getBlockType(x,y, levelImage);
+                BufferedImage blockTexture = getImageResource(getBlockName(blockType));
+
+                g.drawImage(blockTexture, x*pixelSize, y*pixelSize, pixelSize, pixelSize, null);
+
                 if (validPixel(x,y, null, levelImage)) {
-                    Block.BlockTypes blockType = getBlockType(x,y, levelImage);
                     if (blockType == Block.BlockTypes.SPAWN) {
                         spawnPos = new Vec2d(x+0.5,y+0.5);
                         continue;
@@ -89,12 +121,29 @@ public class Main {
                         else break;
                     }
 
-                    levelMap.add(new Block(x, y, width, height, blockType));
+                    levelMap.add(new Rectangle(x, y, width, height, new Block(getBlockName(blockType), blockType)));
                 }
             }
         }
 
         return new LevelInfo(spawnPos, levelImage.getHeight(), levelImage.getWidth());
+    }
+
+    // temporary, when level editor store all strings in a file maybe idk
+    private static String getBlockName(Block.BlockTypes blockType) {
+        return switch (blockType) {
+            case WIN -> "goal.png";
+
+            case LEFT_WALL -> "left.png";
+            case RIGHT_WALL -> "right.png";
+            case FLOOR -> "floor.png";
+            case CEILING -> "ceiling.png";
+
+            case DEFAULT -> "default.png";
+            case DIE -> "die.png";
+
+            default -> "";
+        };
     }
 
     private static boolean validPixel(int x, int y, Block.BlockTypes blockType, BufferedImage image) {
@@ -114,6 +163,8 @@ public class Main {
 
             // BLACK
             case 0 -> Block.BlockTypes.DEFAULT;
+
+            case 0x960096 -> Block.BlockTypes.DIE;
 
             default -> Block.BlockTypes.BACKGROUND;
         };
@@ -138,10 +189,13 @@ public class Main {
         bufferStrategy = frame.getBufferStrategy();
     }
 
+    // lwk just here because intellij SCREAMS at me in yellow that there's a warning otherwise.
+    public static boolean running = true;
+
     private static void mainLoop() {
         player.spawn(levelInfo);
 
-        while (true) {
+        while (running) {
             //long timeStart = System.nanoTime();
 
             startDrawing();
@@ -153,7 +207,7 @@ public class Main {
 
             graphics.translate(-interpolatedPos.x + baseWidth/2d, -interpolatedPos.y + baseHeight/2d);
 
-            graphics.drawImage(level, 0,0,level.getWidth()*levelScale,level.getHeight()*levelScale, null);
+            graphics.drawImage(decoratedLevelImage, 0,0,(decoratedLevelImage.getWidth()/pixelSize)*levelScale,(decoratedLevelImage.getHeight()/pixelSize)*levelScale, null);
 
             entities.forEach(Entity::tick);
             entities.forEach(Entity::render);
@@ -161,9 +215,10 @@ public class Main {
             ParticleUtil.renderParticles();
 
             //graphics.setFont(new Font("Comic Sans MS", Font.PLAIN, 60));
-            //double fps = 1d/((System.nanoTime() - timeStart) * 1.0E-9);
-            //int fpsRounded = (((int) fps));
-            //graphics.drawString(String.valueOf(fpsRounded), 40,40);
+            // probably calculating fps wrong?
+            // 1 / nanoseconds per frame should equal frames per nanosecond? then nano to seconds = / 1000(micro)/1000(milli)/1000(seconds) = * 1E-9
+            //double fps = 1d/((System.nanoTime() - timeStart) * 1E-9);
+            //graphics.drawString(String.valueOf((int) fps)), 40,40);
 
             finishDrawing();
         }
